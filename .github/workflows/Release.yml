@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "*.*.*"
@@ -8,7 +9,6 @@ on:
 jobs:
   release:
     runs-on: macos-13
-
     steps:
       - uses: actions/checkout@v3
       - run: sudo xcode-select -s /Applications/Xcode_15.0.app
@@ -20,3 +20,15 @@ jobs:
         run: gh release create ${{ github.ref_name }} ${{ github.ref_name }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  homebrew:
+    needs: release
+    name: Bump Homebrew formula
+    runs-on: ubuntu-latest
+    environment: Env
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          homebrew-tap: finnvoor/homebrew-tools
+          download-url: https://github.com/finnvoor/xcc/releases/download/${{ github.ref_name }}/${{ github.ref_name }}.tar.gz
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
