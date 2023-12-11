@@ -47,17 +47,30 @@ import SwiftTUI
         )
         let provider = APIProvider(configuration: configuration)
 
-        let products = try await provider.request(
+        let bundleIDs = try await provider.request(
+            APIEndpoint.v1.bundleIDs.get(parameters: .init(fieldsBundleIDs: [.identifier], limit: 200))
+        ).data
+
+        var products = try await provider.request(
             APIEndpoint.v1.ciProducts.get(parameters: .init(
-                fieldsCiProducts: [.bundleID, .name],
                 include: [.bundleID]
             ))
         ).data
 
+        // Some products have the internal ASC bundleID ID
+        // instead of the identifier for some reason
+        for (index, product) in products.enumerated() {
+            if let bundleID = bundleIDs.first(where: {
+                $0.id == product.relationships?.bundleID?.data?.id
+            })?.attributes?.identifier {
+                products[index].relationships?.bundleID?.data?.id = bundleID
+            }
+        }
+
         let selectedProduct = if let product {
             products.first(where: { $0.attributes?.name == product })
         } else {
-            chooseFromList(products, prompt: "Select a product")
+            chooseFromList(products, prompt: "Select a product:")
         }
         guard let selectedProduct else {
             throw Error.couldNotFindProduct(availableProducts: products)
@@ -70,7 +83,7 @@ import SwiftTUI
         let selectedWorkflow = if let workflow {
             workflows.first(where: { $0.attributes?.name == workflow })
         } else {
-            chooseFromList(workflows, prompt: "Select a workflow")
+            chooseFromList(workflows, prompt: "Select a workflow:")
         }
         guard let selectedWorkflow else {
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
@@ -87,7 +100,7 @@ import SwiftTUI
         let selectedGitReference = if let reference {
             gitReferences.first(where: { $0.attributes?.name == reference })
         } else {
-            chooseFromList(gitReferences, prompt: "Select a reference")
+            chooseFromList(gitReferences, prompt: "Select a reference:")
         }
         guard let selectedGitReference else {
             throw Error.couldNotFindReference(availableReferences: gitReferences)
