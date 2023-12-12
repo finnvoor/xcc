@@ -28,9 +28,9 @@ import SwiftTUI
         let privateKeyID = privateKeyID ?? ProcessInfo.processInfo.environment["XCC_PRIVATE_KEY_ID"]
         let privateKey = privateKey ?? ProcessInfo.processInfo.environment["XCC_PRIVATE_KEY"]
 
-        guard let issuerID else { throw ValidationError("Missing Issuer ID. Create an API key at https://appstoreconnect.apple.com/access/api") }
-        guard let privateKeyID else { throw ValidationError("Missing Private Key ID. Create an API key at https://appstoreconnect.apple.com/access/api") }
-        guard var privateKey else { throw ValidationError("Missing Private Key. Create an API key at https://appstoreconnect.apple.com/access/api") }
+        guard let issuerID else { throw ValidationError("Missing Issuer ID. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
+        guard let privateKeyID else { throw ValidationError("Missing Private Key ID. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
+        guard var privateKey else { throw ValidationError("Missing Private Key. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
 
         privateKey = privateKey.replacingOccurrences(of: "\n", with: "")
         if privateKey.hasPrefix("-----BEGIN PRIVATE KEY-----") {
@@ -130,10 +130,6 @@ import SwiftTUI
 
 extension xcc {
     enum Error: LocalizedError {
-        case missingIssuerID
-        case missingPrivateKeyID
-        case missingPrivateKey
-
         case couldNotFindProduct(availableProducts: [CiProduct])
         case couldNotFindWorkflow(availableWorkflows: [CiWorkflow])
         case couldNotFindReference(availableReferences: [ScmGitReference])
@@ -142,24 +138,6 @@ extension xcc {
 
         var errorDescription: String? {
             switch self {
-            case .missingIssuerID: """
-                Missing Issuer ID. Create an API key at https://appstoreconnect.apple.com/access/api and specify an Issuer ID using one of the following:
-                - Pass it to xcc as a flag (--issuer-id <issuer-id>)
-                - Set an environment variable (XCC_ISSUER_ID=<issuer-id>)
-                """
-
-            case .missingPrivateKeyID: """
-                Missing Private Key ID. Create an API key at https://appstoreconnect.apple.com/access/api and specify a Private Key ID using one of the following:
-                - Pass it to xcc as a flag (--private-key-id <private-key-id>)
-                - Set an environment variable (XCC_PRIVATE_KEY_ID=<private-key-id>)
-                """
-
-            case .missingPrivateKey: """
-                Missing Private Key. Create an API key at https://appstoreconnect.apple.com/access/api and specify a Private Key using one of the following:
-                - Pass it to xcc as a flag (--private-key <private-key>)
-                - Set an environment variable (XCC_PRIVATE_KEY=<private-key>)
-                """
-
             case let .couldNotFindProduct(products): """
                 Could not find product with specified name. Available products:
                 \(products.compactMap(\.attributes?.name).map { "- \($0)" }.joined(separator: "\n"))
