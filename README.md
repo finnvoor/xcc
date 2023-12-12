@@ -26,7 +26,7 @@ Download the latest release from [releases](https://github.com/Finnvoor/xcc/rele
   ```
 
 ### Run a workflow
-Running `xcc` will prompt you to select a product, workflow, and git reference. You can also pass the product workflow, and reference using the `--product`, `--workflow`, and `--reference` flags.
+Running `xcc` will prompt you to select a product, workflow, and git reference. You can also pass the product, workflow, and reference using the `--product`, `--workflow`, and `--reference` flags.
 ```bash
 xcc --product "Detail Duo" --workflow TestFlight --reference main
 ```
