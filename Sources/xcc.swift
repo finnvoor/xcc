@@ -47,6 +47,7 @@ import SwiftTUI
         )
         let provider = APIProvider(configuration: configuration)
 
+        ActivityIndicator.start()
         let bundleIDs = try await provider.request(
             APIEndpoint.v1.bundleIDs.get(parameters: .init(fieldsBundleIDs: [.identifier], limit: 200))
         ).data
@@ -56,6 +57,7 @@ import SwiftTUI
                 include: [.bundleID]
             ))
         ).data
+        ActivityIndicator.stop()
 
         // Some products have the internal ASC bundleID ID
         // instead of the identifier for some reason
@@ -76,9 +78,11 @@ import SwiftTUI
             throw Error.couldNotFindProduct(availableProducts: products)
         }
 
+        ActivityIndicator.start()
         let workflows = try await provider.request(
             APIEndpoint.v1.ciProducts.id(selectedProduct.id).workflows.get()
         ).data
+        ActivityIndicator.stop()
 
         let selectedWorkflow = if let workflow {
             workflows.first(where: { $0.attributes?.name == workflow })
@@ -89,6 +93,7 @@ import SwiftTUI
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
         }
 
+        ActivityIndicator.start()
         let repository = try await provider.request(
             APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
         ).data
@@ -96,6 +101,7 @@ import SwiftTUI
         let gitReferences = try await provider.request(
             APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
         ).data
+        ActivityIndicator.stop()
 
         let selectedGitReference = if let reference {
             gitReferences.first(where: { $0.attributes?.name == reference })
@@ -105,8 +111,9 @@ import SwiftTUI
         guard let selectedGitReference else {
             throw Error.couldNotFindReference(availableReferences: gitReferences)
         }
-
-        _ = try? await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
+        
+        ActivityIndicator.start()
+        _ = try await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
             data: .init(
                 type: .ciBuildRuns,
                 relationships: .init(
@@ -121,6 +128,7 @@ import SwiftTUI
                 )
             )
         ))).data
+        ActivityIndicator.stop()
 
         print("✓ ".brightGreen.bold + "Build started")
     }
