@@ -1,7 +1,7 @@
 # ☁️ `xcc`
 A CLI for Xcode Cloud
 
-![Demo](https://github.com/Finnvoor/xcc/assets/8284016/6334aa85-b84d-4101-9c46-385c4551a191)
+![Demo](https://github.com/Finnvoor/xcc/assets/8284016/e04488d2-8eb8-4e6c-80d6-55c7cf2ab82c)
 
 ## Installation
 ### Homebrew
