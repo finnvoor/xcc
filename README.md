@@ -8,6 +8,10 @@ A CLI for Xcode Cloud
 ```bash
 brew install finnvoor/tools/xcc
 ```
+### Mint
+```bash
+mint install finnvoor/xcc
+```
 ### Manual
 Download the latest release from [releases](https://github.com/Finnvoor/xcc/releases).
 
