@@ -32,8 +32,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Finnvoor/SwiftTUI.git",
       "state" : {
-        "revision" : "c4a996bf0d9252ab6d308a0c8b624b7ac21eef79",
-        "version" : "1.0.0"
+        "revision" : "0076c2ab58d5478a3c6cb11faa9068c92e8371ac",
+        "version" : "1.0.1"
       }
     },
     {

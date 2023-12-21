@@ -70,7 +70,7 @@ import SwiftTUI
         let selectedProduct = if let product {
             products.first(where: { $0.attributes?.name == product })
         } else {
-            chooseFromList(products, prompt: "Select a product:")
+            CommandLine.chooseFromList(products, prompt: "Select a product:")
         }
         guard let selectedProduct else {
             throw Error.couldNotFindProduct(availableProducts: products)
@@ -83,7 +83,7 @@ import SwiftTUI
         let selectedWorkflow = if let workflow {
             workflows.first(where: { $0.attributes?.name == workflow })
         } else {
-            chooseFromList(workflows, prompt: "Select a workflow:")
+            CommandLine.chooseFromList(workflows, prompt: "Select a workflow:")
         }
         guard let selectedWorkflow else {
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
@@ -100,7 +100,7 @@ import SwiftTUI
         let selectedGitReference = if let reference {
             gitReferences.first(where: { $0.attributes?.name == reference })
         } else {
-            chooseFromList(gitReferences, prompt: "Select a reference:")
+            CommandLine.chooseFromList(gitReferences, prompt: "Select a reference:")
         }
         guard let selectedGitReference else {
             throw Error.couldNotFindReference(availableReferences: gitReferences)

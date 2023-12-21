@@ -5,10 +5,11 @@ import PackageDescription
 let package = Package(
     name: "xcc",
     platforms: [.macOS(.v11)],
+    products: [.executable(name: "xcc", targets: ["xcc"])],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
         .package(url: "https://github.com/AvdLee/appstoreconnect-swift-sdk.git", from: "3.0.1"),
-        .package(url: "https://github.com/Finnvoor/SwiftTUI.git", from: "1.0.0")
+        .package(url: "https://github.com/Finnvoor/SwiftTUI.git", from: "1.0.1")
     ],
     targets: [
         .executableTarget(
