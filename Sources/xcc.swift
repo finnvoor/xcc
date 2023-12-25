@@ -111,9 +111,9 @@ import SwiftTUI
         guard let selectedGitReference else {
             throw Error.couldNotFindReference(availableReferences: gitReferences)
         }
-        
+
         ActivityIndicator.start()
-        _ = try await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
+        _ = try? await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
             data: .init(
                 type: .ciBuildRuns,
                 relationships: .init(
