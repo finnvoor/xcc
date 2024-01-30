@@ -48,15 +48,15 @@ import SwiftTUI
         let provider = APIProvider(configuration: configuration)
 
         ActivityIndicator.start()
-        let bundleIDs = try await provider.request(
+        let bundleIDs = try await provider.requestAll(
             APIEndpoint.v1.bundleIDs.get(parameters: .init(fieldsBundleIDs: [.identifier], limit: 200))
-        ).data
+        ).flatMap(\.data)
 
-        var products = try await provider.request(
+        var products = try await provider.requestAll(
             APIEndpoint.v1.ciProducts.get(parameters: .init(
                 include: [.bundleID]
             ))
-        ).data
+        ).flatMap(\.data)
         ActivityIndicator.stop()
 
         // Some products have the internal ASC bundleID ID
@@ -79,9 +79,9 @@ import SwiftTUI
         }
 
         ActivityIndicator.start()
-        let workflows = try await provider.request(
+        let workflows = try await provider.requestAll(
             APIEndpoint.v1.ciProducts.id(selectedProduct.id).workflows.get()
-        ).data
+        ).flatMap(\.data)
         ActivityIndicator.stop()
 
         let selectedWorkflow = if let workflow {
@@ -98,9 +98,9 @@ import SwiftTUI
             APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
         ).data
 
-        let gitReferences = try await provider.request(
+        let gitReferences = try await provider.requestAll(
             APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
-        ).data
+        ).flatMap(\.data)
         ActivityIndicator.stop()
 
         let selectedGitReference = if let reference {
@@ -195,5 +195,15 @@ extension ScmGitReference: CustomStringConvertible {
         case nil:
             attributes?.name ?? ""
         }
+    }
+}
+
+extension APIProvider {
+    func requestAll<T: Decodable>(_ endpoint: Request<T>) async throws -> [T] {
+        var results: [T] = []
+        for try await pagedResult in paged(endpoint) {
+            results.append(pagedResult)
+        }
+        return results
     }
 }
