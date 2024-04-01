@@ -62,6 +62,7 @@ import SwiftTUI
                 include: [.bundleID]
             ))
         ).flatMap(\.data)
+        ActivityIndicator.stop()
 
         // Some products have the internal ASC bundleID ID
         // instead of the identifier for some reason
@@ -106,7 +107,7 @@ import SwiftTUI
         }
 
         ActivityIndicator.start()
-        
+
         let repository = try await provider.request(
             APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
         ).data
