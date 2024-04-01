@@ -13,6 +13,7 @@ import SwiftTUI
     @Option var product: String?
     @Option var workflow: String?
     @Option var reference: String?
+    @Option var pullRequestID: Int?
 
     mutating func run() async throws {
         Termios.enterRawMode()
@@ -31,6 +32,10 @@ import SwiftTUI
         guard let issuerID else { throw ValidationError("Missing Issuer ID. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
         guard let privateKeyID else { throw ValidationError("Missing Private Key ID. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
         guard var privateKey else { throw ValidationError("Missing Private Key. Create an API key with the \"Developer\" role at https://appstoreconnect.apple.com/access/api") }
+
+        guard reference == nil || pullRequestID == nil else {
+            throw Error.multipleSourceTypes
+        }
 
         privateKey = privateKey.replacingOccurrences(of: "\n", with: "")
         if privateKey.hasPrefix("-----BEGIN PRIVATE KEY-----") {
@@ -93,24 +98,59 @@ import SwiftTUI
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
         }
 
+        let selectedSourceType = if reference != nil {
+            SourceType.reference
+        } else if pullRequestID != nil {
+            SourceType.pullRequest
+        } else {
+            CommandLine.chooseFromList(SourceType.allCases, prompt: "Select a source type:")
+        }
+
         ActivityIndicator.start()
+
         let repository = try await provider.request(
             APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
         ).data
 
-        let gitReferences = try await provider.requestAll(
-            APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
-        ).flatMap(\.data)
-        ActivityIndicator.stop()
+        var selectedGitReference: ScmGitReference? = nil
+        var selectedPullRequest: ScmPullRequest? = nil
 
-        let selectedGitReference = if let reference {
-            gitReferences.first(where: { $0.attributes?.name == reference })
-        } else {
-            CommandLine.chooseFromList(gitReferences, prompt: "Select a reference:")
+        switch selectedSourceType {
+        case .pullRequest:
+            let pullRequests = try await provider.requestAll(
+                APIEndpoint.v1.scmRepositories.id(repository.id).pullRequests.get()
+            ).flatMap(\.data)
+
+            ActivityIndicator.stop()
+
+            selectedPullRequest = if let pullRequestID {
+                pullRequests.first(where: { $0.attributes?.number == pullRequestID })
+            } else {
+                CommandLine.chooseFromList(pullRequests, prompt: "Select a pull request:")
+            }
+
+            if selectedPullRequest == nil, pullRequestID != nil {
+                throw Error.couldNotFindPullRequest(availablePullRequests: pullRequests)
+            }
+
+        case .reference:
+            let gitReferences = try await provider.requestAll(
+                APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
+            ).flatMap(\.data)
+
+            ActivityIndicator.stop()
+
+            selectedGitReference = if let reference {
+                gitReferences.first(where: { $0.attributes?.name == reference })
+            } else {
+                CommandLine.chooseFromList(gitReferences, prompt: "Select a reference:")
+            }
+
+            guard let selectedGitReference else {
+                throw Error.couldNotFindReference(availableReferences: gitReferences)
+            }
         }
-        guard let selectedGitReference else {
-            throw Error.couldNotFindReference(availableReferences: gitReferences)
-        }
+        
 
         ActivityIndicator.start()
         _ = try? await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
@@ -121,10 +161,18 @@ import SwiftTUI
                         type: .ciWorkflows,
                         id: selectedWorkflow.id
                     )),
-                    sourceBranchOrTag: .init(data: .init(
-                        type: .scmGitReferences,
-                        id: selectedGitReference.id
-                    ))
+                    sourceBranchOrTag: selectedGitReference.map {
+                        .init(data: .init(
+                            type: .scmGitReferences,
+                            id: $0.id
+                        ))
+                    },
+                    pullRequest: selectedPullRequest.map {
+                        .init(data: .init(
+                            type: .scmPullRequests,
+                            id: $0.id
+                        ))
+                    }
                 )
             )
         ))).data
@@ -141,6 +189,8 @@ extension xcc {
         case couldNotFindProduct(availableProducts: [CiProduct])
         case couldNotFindWorkflow(availableWorkflows: [CiWorkflow])
         case couldNotFindReference(availableReferences: [ScmGitReference])
+        case couldNotFindPullRequest(availablePullRequests: [ScmPullRequest])
+        case multipleSourceTypes
 
         // MARK: Internal
 
@@ -160,6 +210,14 @@ extension xcc {
                 Could not find reference with specified name. Available references:
                 \(references.compactMap(\.attributes?.name).map { "- \($0)" }.joined(separator: "\n"))
                 """
+
+            case let .couldNotFindPullRequest(pullRequests): """
+                Could not find pull request with number. Available references:
+                \(pullRequests.compactMap(\.attributes?.number).map { "- \($0)" }.joined(separator: "\n"))
+                """
+
+            case .multipleSourceTypes:
+                "Please only supply one source argument, either `reference` or `pullRequestID`"
             }
         }
     }
@@ -198,6 +256,19 @@ extension ScmGitReference: CustomStringConvertible {
     }
 }
 
+// MARK: - ScmPullRequest + CustomStringConvertible
+
+extension ScmPullRequest: CustomStringConvertible {
+    public var description: String {
+        guard let number = attributes?.number, let title = attributes?.title else {
+            return "Unknown"
+        }
+        
+        return "#\(number): \(title)"
+    }
+}
+
+
 extension APIProvider {
     func requestAll<T: Decodable>(_ endpoint: Request<T>) async throws -> [T] {
         var results: [T] = []
@@ -205,5 +276,19 @@ extension APIProvider {
             results.append(pagedResult)
         }
         return results
+    }
+}
+
+enum SourceType: CustomStringConvertible, CaseIterable {
+    case reference
+    case pullRequest
+
+    var description: String {
+        switch self {
+        case .reference:
+            "Git Reference (branch/tag)"
+        case .pullRequest:
+            "Pull Request"
+        }
     }
 }
