@@ -8,7 +8,7 @@ let package = Package(
     products: [.executable(name: "xcc", targets: ["xcc"])],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
-        .package(url: "https://github.com/AvdLee/appstoreconnect-swift-sdk.git", from: "3.1.0"),
+        .package(url: "https://github.com/finnvoor/appstoreconnect-swift-sdk.git", branch: "master"),
         .package(url: "https://github.com/Finnvoor/SwiftTUI.git", from: "1.0.3")
     ],
     targets: [
