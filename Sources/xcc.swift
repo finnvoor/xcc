@@ -98,7 +98,17 @@ import SwiftTUI
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
         }
 
-        let selectedSourceType = if reference != nil {
+        ActivityIndicator.start()
+        let repository = try await provider.request(
+            APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
+        ).data
+
+        let pullRequests = try await provider.requestAll(
+            APIEndpoint.v1.scmRepositories.id(repository.id).pullRequests.get()
+        ).flatMap(\.data)
+        ActivityIndicator.stop()
+
+        let selectedSourceType = if reference != nil || pullRequests.isEmpty {
             SourceType.reference
         } else if pullRequestID != nil {
             SourceType.pullRequest
@@ -108,19 +118,11 @@ import SwiftTUI
 
         ActivityIndicator.start()
 
-        let repository = try await provider.request(
-            APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
-        ).data
-
         var selectedGitReference: ScmGitReference? = nil
         var selectedPullRequest: ScmPullRequest? = nil
 
         switch selectedSourceType {
         case .pullRequest:
-            let pullRequests = try await provider.requestAll(
-                APIEndpoint.v1.scmRepositories.id(repository.id).pullRequests.get()
-            ).flatMap(\.data)
-
             ActivityIndicator.stop()
 
             selectedPullRequest = if let pullRequestID {
@@ -150,7 +152,6 @@ import SwiftTUI
                 throw Error.couldNotFindReference(availableReferences: gitReferences)
             }
         }
-        
 
         ActivityIndicator.start()
         _ = try await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
@@ -263,11 +264,10 @@ extension ScmPullRequest: CustomStringConvertible {
         guard let number = attributes?.number, let title = attributes?.title else {
             return "Unknown"
         }
-        
+
         return "#\(number): \(title)"
     }
 }
-
 
 extension APIProvider {
     func requestAll<T: Decodable>(_ endpoint: Request<T>) async throws -> [T] {
@@ -279,9 +279,13 @@ extension APIProvider {
     }
 }
 
+// MARK: - SourceType
+
 enum SourceType: CustomStringConvertible, CaseIterable {
     case reference
     case pullRequest
+
+    // MARK: Internal
 
     var description: String {
         switch self {
