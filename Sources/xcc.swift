@@ -1,7 +1,7 @@
 import AppStoreConnect_Swift_SDK
 import ArgumentParser
 import Foundation
-import SwiftTUI
+import Noora
 
 // MARK: - xcc
 
@@ -16,15 +16,6 @@ import SwiftTUI
     @Option var pullRequestID: Int?
 
     mutating func run() async throws {
-        Termios.enterRawMode()
-        defer { Termios.pop() }
-        signal(SIGINT) { _ in
-            Cursor.show()
-            fflush(stdout)
-            signal(SIGINT, SIG_DFL)
-            raise(SIGINT)
-        }
-
         let issuerID = issuerID ?? ProcessInfo.processInfo.environment["XCC_ISSUER_ID"]
         let privateKeyID = privateKeyID ?? ProcessInfo.processInfo.environment["XCC_PRIVATE_KEY_ID"]
         let privateKey = privateKey ?? ProcessInfo.processInfo.environment["XCC_PRIVATE_KEY"]
@@ -52,17 +43,25 @@ import SwiftTUI
         )
         let provider = APIProvider(configuration: configuration)
 
-        ActivityIndicator.start()
-        let bundleIDs = try await provider.requestAll(
-            APIEndpoint.v1.bundleIDs.get(parameters: .init(fieldsBundleIDs: [.identifier], limit: 200))
-        ).flatMap(\.data)
+        var bundleIDs: [BundleID] = []
+        var products: [CiProduct] = []
+        try await Noora().progressStep(
+            message: "Fetching bundle IDs",
+            successMessage: "Fetched bundle IDs and products",
+            errorMessage: "Failed to fetch bundle IDs and products",
+            showSpinner: true
+        ) { updateMessage in
+            bundleIDs = try await provider.requestAll(
+                APIEndpoint.v1.bundleIDs.get(parameters: .init(fieldsBundleIDs: [.identifier], limit: 200))
+            ).flatMap(\.data)
 
-        var products = try await provider.requestAll(
-            APIEndpoint.v1.ciProducts.get(parameters: .init(
-                include: [.bundleID]
-            ))
-        ).flatMap(\.data)
-        ActivityIndicator.stop()
+            updateMessage("Fetching products")
+            products = try await provider.requestAll(
+                APIEndpoint.v1.ciProducts.get(parameters: .init(
+                    include: [.bundleID]
+                ))
+            ).flatMap(\.data)
+        }
 
         // Some products have the internal ASC bundleID ID
         // instead of the identifier for some reason
@@ -77,58 +76,81 @@ import SwiftTUI
         let selectedProduct = if let product {
             products.first(where: { $0.attributes?.name == product })
         } else {
-            CommandLine.chooseFromList(products, prompt: "Select a product:")
+            Noora().singleChoicePrompt(
+                question: "Select a product",
+                options: products,
+                filterMode: .enabled
+            )
         }
         guard let selectedProduct else {
             throw Error.couldNotFindProduct(availableProducts: products)
         }
 
-        ActivityIndicator.start()
-        let workflows = try await provider.requestAll(
-            APIEndpoint.v1.ciProducts.id(selectedProduct.id).workflows.get()
-        ).flatMap(\.data)
-        ActivityIndicator.stop()
+        var workflows: [CiWorkflow] = []
+        try await Noora().progressStep(
+            message: "Fetching workflows",
+            successMessage: "Fetched workflows",
+            errorMessage: "Failed to fetch workflows",
+            showSpinner: true
+        ) { _ in
+            workflows = try await provider.requestAll(
+                APIEndpoint.v1.ciProducts.id(selectedProduct.id).workflows.get()
+            ).flatMap(\.data)
+        }
 
         let selectedWorkflow = if let workflow {
             workflows.first(where: { $0.attributes?.name == workflow })
         } else {
-            CommandLine.chooseFromList(workflows, prompt: "Select a workflow:")
+            Noora().singleChoicePrompt(
+                question: "Select a workflow",
+                options: workflows,
+                filterMode: .enabled
+            )
         }
         guard let selectedWorkflow else {
             throw Error.couldNotFindWorkflow(availableWorkflows: workflows)
         }
 
-        ActivityIndicator.start()
-        let repository = try await provider.request(
-            APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
-        ).data
+        var repository: ScmRepository!
+        var pullRequests: [ScmPullRequest] = []
+        try await Noora().progressStep(
+            message: "Fetching repository",
+            successMessage: "Fetched repository and pull requests",
+            errorMessage: "Failed to fetch repository and pull requests",
+            showSpinner: true
+        ) { updateMessage in
+            repository = try await provider.request(
+                APIEndpoint.v1.ciWorkflows.id(selectedWorkflow.id).repository.get()
+            ).data
 
-        let pullRequests = try await provider.requestAll(
-            APIEndpoint.v1.scmRepositories.id(repository.id).pullRequests.get()
-        ).flatMap(\.data)
-        ActivityIndicator.stop()
+            updateMessage("Fetching pull requests")
+
+            pullRequests = try await provider.requestAll(
+                APIEndpoint.v1.scmRepositories.id(repository.id).pullRequests.get()
+            ).flatMap(\.data)
+        }
 
         let selectedSourceType = if reference != nil || pullRequests.isEmpty {
             SourceType.reference
         } else if pullRequestID != nil {
             SourceType.pullRequest
         } else {
-            CommandLine.chooseFromList(SourceType.allCases, prompt: "Select a source type:")
+            Noora().singleChoicePrompt(question: "Select a source type", options: SourceType.allCases)
         }
-
-        ActivityIndicator.start()
 
         var selectedGitReference: ScmGitReference? = nil
         var selectedPullRequest: ScmPullRequest? = nil
 
         switch selectedSourceType {
         case .pullRequest:
-            ActivityIndicator.stop()
-
             selectedPullRequest = if let pullRequestID {
                 pullRequests.first(where: { $0.attributes?.number == pullRequestID })
             } else {
-                CommandLine.chooseFromList(pullRequests, prompt: "Select a pull request:")
+                Noora().singleChoicePrompt(
+                    question: "Select a pull request",
+                    options: pullRequests,
+                    filterMode: .enabled
+                )
             }
 
             if selectedPullRequest == nil, pullRequestID != nil {
@@ -136,16 +158,26 @@ import SwiftTUI
             }
 
         case .reference:
-            let gitReferences = try await provider.requestAll(
-                APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
-            ).flatMap(\.data)
-
-            ActivityIndicator.stop()
+            var gitReferences: [ScmGitReference] = []
+            try await Noora().progressStep(
+                message: "Fetching git references",
+                successMessage: "Fetched git references",
+                errorMessage: "Failed to fetch git references",
+                showSpinner: true
+            ) { _ in
+                gitReferences = try await provider.requestAll(
+                    APIEndpoint.v1.scmRepositories.id(repository.id).gitReferences.get()
+                ).flatMap(\.data)
+            }
 
             selectedGitReference = if let reference {
                 gitReferences.first(where: { $0.attributes?.name == reference })
             } else {
-                CommandLine.chooseFromList(gitReferences, prompt: "Select a reference:")
+                Noora().singleChoicePrompt(
+                    question: "Select a reference",
+                    options: gitReferences,
+                    filterMode: .enabled
+                )
             }
 
             guard selectedGitReference != nil else {
@@ -153,33 +185,38 @@ import SwiftTUI
             }
         }
 
-        ActivityIndicator.start()
-        _ = try await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
-            data: .init(
-                type: .ciBuildRuns,
-                relationships: .init(
-                    workflow: .init(data: .init(
-                        type: .ciWorkflows,
-                        id: selectedWorkflow.id
-                    )),
-                    sourceBranchOrTag: selectedGitReference.map {
-                        .init(data: .init(
-                            type: .scmGitReferences,
-                            id: $0.id
-                        ))
-                    },
-                    pullRequest: selectedPullRequest.map {
-                        .init(data: .init(
-                            type: .scmPullRequests,
-                            id: $0.id
-                        ))
-                    }
+        try await Noora().progressStep(
+            message: "Starting CI build run",
+            successMessage: "CI build run started",
+            errorMessage: "Failed to start CI build run",
+            showSpinner: true
+        ) { _ in
+            _ = try await provider.request(APIEndpoint.v1.ciBuildRuns.post(.init(
+                data: .init(
+                    type: .ciBuildRuns,
+                    relationships: .init(
+                        workflow: .init(data: .init(
+                            type: .ciWorkflows,
+                            id: selectedWorkflow.id
+                        )),
+                        sourceBranchOrTag: selectedGitReference.map {
+                            .init(data: .init(
+                                type: .scmGitReferences,
+                                id: $0.id
+                            ))
+                        },
+                        pullRequest: selectedPullRequest.map {
+                            .init(data: .init(
+                                type: .scmPullRequests,
+                                id: $0.id
+                            ))
+                        }
+                    )
                 )
-            )
-        ))).data
-        ActivityIndicator.stop()
+            ))).data
+        }
 
-        print("✓ ".brightGreen.bold + "Build started")
+        Noora().success(.alert("Build started"))
     }
 }
 
@@ -226,17 +263,25 @@ extension xcc {
 
 // MARK: - CiProduct + CustomStringConvertible
 
-extension CiProduct: CustomStringConvertible {
+extension CiProduct: @retroactive CustomStringConvertible, @retroactive Equatable {
+    public static func == (lhs: AppStoreConnect_Swift_SDK.CiProduct, rhs: AppStoreConnect_Swift_SDK.CiProduct) -> Bool {
+        lhs.id == rhs.id
+    }
+
     public var description: String {
         let name = attributes?.name ?? "Unknown"
         let bundleID = relationships?.bundleID?.data
-        return "\(name) \((bundleID.map { "(\($0.id))" } ?? "").faint)"
+        return bundleID.map { Noora().format("\(name) \(.muted("(\($0.id))"))") } ?? name
     }
 }
 
 // MARK: - CiWorkflow + CustomStringConvertible
 
-extension CiWorkflow: CustomStringConvertible {
+extension CiWorkflow: @retroactive CustomStringConvertible, @retroactive Equatable {
+    public static func == (lhs: AppStoreConnect_Swift_SDK.CiWorkflow, rhs: AppStoreConnect_Swift_SDK.CiWorkflow) -> Bool {
+        lhs.id == rhs.id
+    }
+
     public var description: String {
         attributes?.name ?? "Unknown"
     }
@@ -244,13 +289,20 @@ extension CiWorkflow: CustomStringConvertible {
 
 // MARK: - ScmGitReference + CustomStringConvertible
 
-extension ScmGitReference: CustomStringConvertible {
+extension ScmGitReference: @retroactive CustomStringConvertible, @retroactive Equatable {
+    public static func == (
+        lhs: AppStoreConnect_Swift_SDK.ScmGitReference,
+        rhs: AppStoreConnect_Swift_SDK.ScmGitReference
+    ) -> Bool {
+        lhs.id == rhs.id
+    }
+
     public var description: String {
         switch attributes?.kind {
         case .branch:
-            "(branch) ".faint + (attributes?.name ?? "")
+            Noora().format("\(.muted("(branch)")) \(attributes?.name ?? "")")
         case .tag:
-            "   (tag) ".faint + (attributes?.name ?? "")
+            Noora().format("\(.muted("   (tag)")) \(attributes?.name ?? "")")
         case nil:
             attributes?.name ?? ""
         }
@@ -259,7 +311,14 @@ extension ScmGitReference: CustomStringConvertible {
 
 // MARK: - ScmPullRequest + CustomStringConvertible
 
-extension ScmPullRequest: CustomStringConvertible {
+extension ScmPullRequest: @retroactive CustomStringConvertible, @retroactive Equatable {
+    public static func == (
+        lhs: AppStoreConnect_Swift_SDK.ScmPullRequest,
+        rhs: AppStoreConnect_Swift_SDK.ScmPullRequest
+    ) -> Bool {
+        lhs.id == rhs.id
+    }
+
     public var description: String {
         guard let number = attributes?.number, let title = attributes?.title else {
             return "Unknown"
