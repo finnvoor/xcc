@@ -17,7 +17,7 @@ Download the latest release from [releases](https://github.com/Finnvoor/xcc/rele
 
 ## Usage
 ### Authentication
-`xcc` requires an API key from App Store Connect. Visit https://appstoreconnect.apple.com/access/api, create an API key with the "Developer" role, and either:
+`xcc` requires an API key from App Store Connect. Visit https://appstoreconnect.apple.com/access/integrations/api, create an API key with the "Developer" role, and either:
 - Pass the Issuer ID, Private Key ID, and Private Key to `xcc` as flags:
   ```bash
   xcc --issuer-id <issuer-id> --private-key-id <private-key-id> --private-key <private-key>
